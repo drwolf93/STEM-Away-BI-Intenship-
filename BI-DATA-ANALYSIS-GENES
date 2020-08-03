@@ -1,0 +1,212 @@
+if (!requireNamespace("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+
+BiocManager::install(version = "3.11")
+BiocManager::install(c('affy','affyPLM', 'sva', 'AnnotationDbi', 'hgu133plus2.db', 'simpleaffy', 'arrayQualityMetrics','affyQCReport', 'gcrma', 'ggplot2'))
+install.packages("readxl")
+
+library(sva)
+library(readxl)
+library(affy)
+library(simpleaffy)
+library("arrayQualityMetrics")
+library(affyQCReport)
+library(preprocessCore)
+library(affyPLM)
+library(ggplot2)
+library(pheatmap)
+
+#read data from the computer
+datanew <- ReadAffy(celfile.path = "/Users/sebi/Desktop/R project/Data/GSE32323_RAW")
+#express data as a data frame
+df <- as.data.frame(exprs(datanew))
+
+#create QC Plot, each array being represented by a separate line in the figure.
+plot(qc(datanew))
+
+#create arrayQualityMetrics data sets to examine the info from datanew.
+arrayQualityMetrics(expressionset = datanew, outdir = "Report_for_datanew_dataset", force = TRUE, do.logtransform = TRUE)
+
+#create affyQCReport
+QCReport(datanew,file="QCReport.pdf")
+
+#examine datanew 
+RLE(fitPLM(datanew), main="RLE for datanew dataset")
+
+rawset <- fitPLM(datanew)
+
+RLE_statistics = RLE(rawset,type="stats")
+hist(RLE_statistics, main = "Histogram of RLE - median", xlab= "median", cex.main=2, cex.axis=1.5, cex.lab=1.5)
+
+NUSE(rawset,main="NUSE for datanew dataset")
+
+NUSE_statistics = NUSE(rawset,type="stats")
+Nuse_S <- data.frame(Median = NUSE_statistics[1, ]
+ggplot(Nuse_S, aes(Median))+ geom_histogram()+ xlab("Median")+ ylab("Frequency")+ ggtitle("NUSE Histogram")+ theme_bw()
+par(mai=c(3.5,1,1,1))  
+NUSE(pset, main="NUSE", las=2)
+
+#Before normalization just to compare data we have to create a boxplot
+boxplot( x = cleans, 
+         ylab = "Probe Intensities", 
+         main= "Gene Expres Data Before Normalization",
+         col = rainbow(97),
+         frame.plot = TRUE, 
+         staplewex = 0, 
+         whisklty = 1,
+         horizontal = F,
+         las= 2,
+         cex.axis= .41,)+
+  par(mar=c(7,4,3,1)+2)
+
+# Normalize data with mas5() 
+#mas5() normalises each array independently and sequentially
+n_data<- mas5(cleans, normalize= T, sc= 500)
+
+#export data in a csv vit normalize data set after mas5()
+write.csv(exprs(n_data), "mas5_norm.csv", row.names= FALSE)
+
+#Make a data-frame for normalize data
+mas5_norm<- exprs(n_data)
+par(mfrow=c(2,1))
+
+#in addition we can make rma() or gcrma() normalization
+rma <- rma(datanew)
+boxplot(exprs(rma), "Boxplot rma Data")
+
+gcrma_clean <- gcrma(datanew)
+box_plot(exprs(gcrma_clean), "Boxplot gcrma normalized data")
+
+#clean data, we will first specify the position for the data to remove
+#after we just remove those posiitions from the dataset creating a new AFFYBATCH object with cleaned data
+position <- c(1,13,34,41,49,62,77,82,93,96) 
+cleans<- n_data[-position]
+
+
+#boxplot after normalization
+expression_matrix <- log2(n_data@assayData$exprs)
+pdf("boxplot_after_mas5.pdf", width = 12, height = 9)
+box_plot(expression_matrix, use.cols = T)
+dev.off()
+
+#Batch correction
+phenoT <- read_xlsx("/Users/sebi/Desktop/R project/batch_metadata.xlsx")
+penoT <-as.data.frame(phenoT)
+setd <- factor(phenoT$CN)
+modP<- model.matrix(~-1 + setd)
+batchc <- phenoT$BATCH
+batchcorr <- ComBat(n_data, batchc, mod=modP[,1])
+write.csv(batchcorr, file="Batch_Correction_Data.csv")
+
+
+#Principal Component analysis (PCA) visualization
+
+#before normalization -ggplot
+PCA1 <- prcomp(datanew@assayData$exprs, center = FALSE, scale = FALSE)
+df1 <- as.data.frame(PCA1$rotation)
+df1$group <- phenoT$mygroup
+df1$names <- rownames(df1)
+pdf("PCA1_before_normalization.pdf", width = 12, height = 9)
+ggplot(data = df1, aes(x = PC1, y = PC2, color = group, label = names))+geom_point()+geom_text(aes(label = names), color = "black", size = 1)+ggtitle("PCA before normalization")
+dev.off()
+percentage1 <- round(PCA1$sdev/sum(PCA1$sdev)*100, 2)
+
+#after normalization but before batch correction
+PCA2 <- prcomp(n_data@assayData$exprs, center = FALSE, scale = FALSE)
+df2 <- as.data.frame(PCA2$rotation)
+df2$group <- phenoT$mygroup
+df2$names <- rownames(df2)
+pdf("PCA2_after_normalization.pdf", width = 12, height = 9)
+ggplot(data = df2, aes(x = PC1, y = PC2, color = group, label = names))+geom_point()+geom_text(aes(label = names), color = "black", size = 1)+ggtitle("PCA after normalization")
+dev.off()
+percentage2 <- round(PCA2$sdev/sum(PCA2$sdev)*100, 2)
+
+
+#PCA after normalization and bacth correction
+PCA3 <- prcomp(batchcorr, center = FALSE, scale = FALSE)
+df3 <- as.data.frame(PCA3$rotation)
+df3$group <- phenoT$mygroup
+df3$names <- rownames(df3)
+pdf("PCA3_after_batch_correction.pdf", width = 12, height = 9)
+ggplot(data = df3, aes(x = PC1, y = PC2, color = group, label = names))+geom_point()+geom_text(aes(label = names), color = "black", size = 1)+ggtitle("PCA after batch correction")
+dev.off()
+percentage3 <- round(PCA3$sdev/sum(PCA3$sdev)*100, 2)
+
+#Heatmaps
+#healtmap before batch correction
+firstmap <- 1-cor(norm_data@assayData$exprs)
+annotation <- phenoT$mygroup
+names(annotation) <- colnames(norm_data@assayData$exprs)
+pdf("PHeatmap1.pdf", width = 20, height = 15)
+pheatmap(firstmap, annotation_col = as.data.frame(annotation), main = "Heatmap before batch correction", show_rownames = F, fontsize = 4)
+dev.off()
+
+#heatmap after batchh correction
+heatmapbatch<- 1-cor(batchcorr)
+pdf("PHeatmapbatch.pdf", width = 20, height = 15)
+pheatmap(heatmapbatch, annotation_col = as.data.frame(annotation), main = "Heatmap after batch correction", show_rownames = F, fontsize = 4)
+dev.off()
+
+
+#Week 4 - DGE analysis 
+
+BiocManager::install("hgu133plus2.db")
+library(hgu133plus2.db)
+x <- hgu133plus2.db
+length(keys(x))
+columns(x)
+
+Batch_Correction_Data <- read.csv("Batch_Correction_Data.csv")
+exprs_data <- as.data.frame(Batch_Correction_Data)
+exprs_data$PROBEID <- as.character(rownames(exprs_data))
+new_data <- exprs_data$PROBEID
+exprs_annotation <- AnnotationDbi::select(x, keys=exprs_data$PROBEID, columns="SYMBOL")
+d_annotat <- na.omit(exprs_annotation)
+
+#delete duplicates rows in the SYMBOL column that have the same data and leave just one row.  
+install.packages("dplyr")
+library(dplyr)
+datas <- d_annotat[!duplicated(d_annotat[ , c("SYMBOL")]),]
+
+#Gene filtering
+rownames(datas) <- datas$SYMBOL
+means <- rowMeans(exprs_data[,2:98])
+quantile2 <- as.numeric(quantile(means, probs=0.02, na.rm=TRUE))
+final_d<- datas[which(means > quantile2),]
+write.csv(final_d, "Gene_Filtered_Data.csv")
+
+
+#Diferential Expression Gene Analysis with Lima
+library(limma)
+library(Biobase)
+library(purr)
+
+#Create a new expression set object
+data_set <- ExpressionsSet(assaydata = as.matrix(final_d))
+data_set@phenoData@data <-cleans@phenoData@data 
+met_d <- cleans@phenoData@data
+sampletype <- met_d$mygroup
+sampletype <- strsplit(sampletype, ",")
+sampletype <- sapply(sampletype, function(x) x[1])
+factor1 <- as.factor(sampletype)
+
+#adding the factor to the expression set object
+data_set$description <- factor1
+
+#model desing
+design <- model.matrix(~description+ 0, data_set)
+colnames(design) <- levels(factor1)
+
+#fit a linear model
+fit <- lmFit(data_set, design)
+
+contrastmatrix <- makeContrasts(cancer-normal, levels(design))
+fitmodel <- contrasts.fit(fit, contrastmatrix(x))
+fitmodel <-eBayes(fitmodel, 0)
+
+#extract top 100 genes that are expressed the most
+listgenes <- d_annotat$SYMBOL
+
+top100 <- topTable(fitmodel, genelist = listgenes, coef=2, p.value=0.05, adjust = "fdr", sort.by = "p", number=100)
+wite.table(top100, file = '/Users/sebi/Desktop/R project/TOP100.xls', row.names=F, sep ="\t")
+
