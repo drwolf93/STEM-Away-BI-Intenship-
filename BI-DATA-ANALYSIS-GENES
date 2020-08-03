@@ -214,5 +214,16 @@ totalgenes <-topTable(fitmodel, genelist=listgenes, coef=2, p.value=0.05, adjust
 write.table(totalgenes, file = '/Users/sebi/Desktop/R project/totalgenes.xls', row.names=F, sep ="\t")
 
 #Volcano Plot with enhanced volcano
+BiocManager::install('EnhancedVolcano')
+library(EnhancedVolcano)
+
+EnhancedVolcano(totalgenes, lab=totalgenes$X1, x="logFC", y="adj.P.Val", 
+                pCutoff=10e-6, FCcutoff>|2|, pointSize=1, legendLabSize=10, labSize=3.0,
+                title="Volcano Plot after LIMMA analysis", subtitle="EnhancedVolcano Plot")
+
+#Heatmap of the genes
+
+
+
 
 
