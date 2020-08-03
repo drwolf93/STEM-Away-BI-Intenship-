@@ -208,5 +208,11 @@ fitmodel <-eBayes(fitmodel, 0)
 listgenes <- d_annotat$SYMBOL
 
 top100 <- topTable(fitmodel, genelist = listgenes, coef=2, p.value=0.05, adjust = "fdr", sort.by = "p", number=100)
-wite.table(top100, file = '/Users/sebi/Desktop/R project/TOP100.xls', row.names=F, sep ="\t")
+write.table(top100, file = '/Users/sebi/Desktop/R project/TOP100.xls', row.names=F, sep ="\t")
+
+totalgenes <-topTable(fitmodel, genelist=listgenes, coef=2, p.value=0.05, adjust="fdr", sort.by ="p", number = 20000)
+write.table(totalgenes, file = '/Users/sebi/Desktop/R project/totalgenes.xls', row.names=F, sep ="\t")
+
+#Volcano Plot with enhanced volcano
+
 
